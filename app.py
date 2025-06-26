@@ -10,7 +10,7 @@ import os
 import tempfile
 
 # 🔐 OpenAI API-nøkkel
-os.environ["OPENAI_API_KEY"] = "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"  # ← SETT INN DIN EGEN
+os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
 
 st.set_page_config(page_title="Reguleringsbot", layout="wide")
 st.title("🏗️ Reguleringsbot – Chat og kart over Tromsø")
