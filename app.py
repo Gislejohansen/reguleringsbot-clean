@@ -57,6 +57,24 @@ def setup_bot(pdf_file_path):
     vectordb = FAISS.from_documents(chunks, OpenAIEmbeddings())
     return RetrievalQA.from_chain_type(llm=OpenAI(), retriever=vectordb.as_retriever())
 
+@st.cache_resource
+def setup_kommuneplan():
+    kommuneplaner = [
+        "Planer/kommuneplansens_samfunnsdel_2020-2032.pdf",
+        "Planer/kpa.pdf"
+    ]
+    docs = []
+    for fil in kommuneplaner:
+        loader = PyPDFLoader(fil)
+        docs.extend(loader.load())
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+    chunks = splitter.split_documents(docs)
+    vectorstore = FAISS.from_documents(chunks, OpenAIEmbeddings())
+    return vectorstore.as_retriever()
+
+kommuneplan_retriever = setup_kommuneplan()
+
+
 qa = setup_bot(pdf_path)
 
 # 📍 KART
@@ -108,6 +126,27 @@ with col2:
     for spm in forslag:
         if st.button(spm):
             st.session_state.input_q = spm
+            
+    st.markdown("---")
+st.subheader("📊 Analyse: Er planen i tråd med kommunens mål?")
+if st.button("Analyser mot kommuneplanen"):
+    with st.spinner("Sammenligner med kommuneplanens mål..."):
+        analyse_prompt = """
+Du har tilgang til Tromsø kommunes overordnede mål gjennom kommuneplanens samfunnsdel og KPA.
+Vurder i hvilken grad den valgte reguleringsplanen er i tråd med:
+- bærekraftig utvikling
+- arealstrategi
+- krav til grøntområder
+- byggehøyder og fortetting
+- andre relevante føringer
+Svar tydelig og konkret.
+"""
+        llm = OpenAI(model="gpt-3.5-turbo")
+        analyse_chain = RetrievalQA.from_chain_type(llm=llm, retriever=kommuneplan_retriever)
+        vurdering = analyse_chain.run(analyse_prompt)
+        st.success("Analyse fullført")
+        st.markdown(f"**AI-vurdering:**\n\n{vurdering}")
+
 
     # 🔤 Inntastingsfelt
     user_input = st.text_input("Skriv inn spørsmål:", key="input_q")
