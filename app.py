@@ -60,7 +60,7 @@ def setup_bot(pdf_file_path):
 @st.cache_resource
 def setup_kommuneplan():
     kommuneplaner = [
-        "Planer/kommuneplansens_samfunnsdel_2020-2032.pdf",
+        "Planer/kommuneplanens_samfunnsdel_2020.pdf",
         "Planer/kpa.pdf"
     ]
     docs = []
