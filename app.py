@@ -1,4 +1,5 @@
 import streamlit as st
+from langchain_openai import ChatOpenAI
 import folium
 from streamlit_folium import st_folium
 from langchain_community.document_loaders import PyPDFLoader
@@ -141,6 +142,7 @@ Vurder i hvilken grad den valgte reguleringsplanen er i tråd med:
 - andre relevante føringer
 Svar tydelig og konkret.
 """
+        from langchain_openai import ChatOpenAI
         llm = OpenAI(model="gpt-3.5-turbo")
         analyse_chain = RetrievalQA.from_chain_type(llm=llm, retriever=kommuneplan_retriever)
         vurdering = analyse_chain.run(analyse_prompt)
