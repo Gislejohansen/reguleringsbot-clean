@@ -48,7 +48,7 @@ if uploaded_file:
 else:
     pdf_path = områdeinfo[områdevalg]["pdf"]
 
-# 🧐 Lag RAG-modell (cached)
+# 🧠 Lag RAG-modell for chat
 @st.cache_resource
 def setup_bot(pdf_file_path):
     loader = PyPDFLoader(pdf_file_path)
@@ -58,23 +58,27 @@ def setup_bot(pdf_file_path):
     vectordb = FAISS.from_documents(chunks, OpenAIEmbeddings())
     return RetrievalQA.from_chain_type(llm=ChatOpenAI(model="gpt-3.5-turbo"), retriever=vectordb.as_retriever())
 
-@st.cache_resource
-def setup_kommuneplan():
-    kommuneplaner = [
-        "Planer/kommuneplanens_samfunnsdel_2020.pdf",
-        "Planer/kpa.pdf"
-    ]
-    docs = []
-    for fil in kommuneplaner:
-        loader = PyPDFLoader(fil)
-        docs.extend(loader.load())
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-    chunks = splitter.split_documents(docs)
-    vectorstore = FAISS.from_documents(chunks, OpenAIEmbeddings())
-    return vectorstore.as_retriever()
-
-kommuneplan_retriever = setup_kommuneplan()
 qa = setup_bot(pdf_path)
+
+# 🧠 Lag RAG-modell for analyse (kombinerer reguleringsplan + kommuneplan)
+@st.cache_resource
+def setup_sammenligning(pdf_file_path):
+    # Last inn reguleringsplan
+    loader = PyPDFLoader(pdf_file_path)
+    reg_docs = loader.load()
+
+    # Last inn kommuneplaner
+    kp_docs = []
+    for fil in ["Planer/kommuneplanens_samfunnsdel_2020.pdf", "Planer/kpa.pdf"]:
+        kp_docs.extend(PyPDFLoader(fil).load())
+
+    # Slå sammen
+    alle_docs = reg_docs + kp_docs
+
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+    chunks = splitter.split_documents(alle_docs)
+    vectordb = FAISS.from_documents(chunks, OpenAIEmbeddings())
+    return RetrievalQA.from_chain_type(llm=ChatOpenAI(model="gpt-3.5-turbo"), retriever=vectordb.as_retriever())
 
 # 📍 KART
 koordinater = områdeinfo[områdevalg]["koordinater"]
@@ -100,7 +104,7 @@ folium.LayerControl().add_to(m)
 # 📐 Layout: venstre = kart, høyre = chatbot
 col1, col2 = st.columns([1.5, 1])
 
-# 🗜️ VENSTRE: Kart
+# 🗺️ VENSTRE: Kart
 with col1:
     st.subheader("🌍 Kart over Tromsø")
     st_folium(m, width=700, height=500)
@@ -126,27 +130,6 @@ with col2:
         if st.button(spm):
             st.session_state.input_q = spm
 
-    # 🔹 Analyseknapp
-    st.markdown("---")
-    st.subheader("📊 Analyse: Er planen i tråd med kommunens mål?")
-    if st.button("Analyser mot kommuneplanen"):
-        with st.spinner("Sammenligner med kommuneplanens mål..."):
-            analyse_prompt = """
-Du har tilgang til Tromsø kommunes overordnede mål gjennom kommuneplanens samfunnsdel og KPA.
-Vurder i hvilken grad den valgte reguleringsplanen er i tråd med:
-- bærekraftig utvikling
-- arealstrategi
-- krav til grøntområder
-- byggehøyder og fortetting
-- andre relevante føringer
-Svar tydelig og konkret.
-"""
-            llm = ChatOpenAI(model="gpt-3.5-turbo")
-            analyse_chain = RetrievalQA.from_chain_type(llm=llm, retriever=kommuneplan_retriever)
-            vurdering = analyse_chain.run(analyse_prompt)
-            st.success("Analyse fullført")
-            st.markdown(f"**AI-vurdering:**\n\n{vurdering}")
-
     # 🔤 Inntastingsfelt
     user_input = st.text_input("Skriv inn spørsmål:", key="input_q")
 
@@ -162,12 +145,32 @@ Svar tydelig og konkret.
         with st.chat_message("assistant"):
             st.markdown(f"**Svar:** {a}")
 
-    # 📅 Eksport som tekstfil
-    if st.session_state.chat_history:
-        full_chat = "\n\n".join([f"Spørsmål: {q}\nSvar: {a}" for q, a in st.session_state.chat_history])
-        st.download_button("📄 Last ned samtalen", full_chat, file_name="chat_samtale.txt")
+    st.markdown("---")
+    st.subheader("📊 Analyse: Er planen i tråd med kommunens mål?")
 
-# 🔹 Sidebar: forslag til analyser
+    if st.button("Analyser mot kommuneplanen"):
+        with st.spinner("Sammenligner med kommuneplanens mål..."):
+            analyse_prompt = """
+Du har tilgang til både reguleringsplanen og Tromsø kommunes overordnede mål (kommuneplan og KPA).
+Vurder i hvilken grad denne reguleringsplanen er i tråd med:
+- bærekraftig utvikling
+- arealstrategi
+- krav til grøntområder
+- byggehøyder og fortetting
+- andre relevante føringer
+Svar tydelig og konkret.
+"""
+            analyse_chain = setup_sammenligning(pdf_path)
+            vurdering = analyse_chain.run(analyse_prompt)
+            st.success("Analyse fullført")
+            st.markdown(f"**AI-vurdering:**\n\n{vurdering}")
+
+# 📥 Eksport som tekstfil
+if st.session_state.chat_history:
+    full_chat = "\n\n".join([f"Spørsmål: {q}\nSvar: {a}" for q, a in st.session_state.chat_history])
+    st.download_button("📄 Last ned samtalen", full_chat, file_name="chat_samtale.txt")
+
+# 💡 Foreslå analyseidé
 st.sidebar.markdown("---")
 st.sidebar.header("💡 Foreslå analyseidé")
 
@@ -195,7 +198,7 @@ if st.sidebar.button("Send inn forslag"):
     else:
         st.sidebar.warning("Skriv inn et forslag før du sender.")
 
-with st.expander("📜 Se innsendte forslag (midlertidig lagret)"):
+with st.expander("📝 Se innsendte forslag (midlertidig lagret)"):
     if "innsendte_forslag" in st.session_state:
         for idx, (kat, txt) in enumerate(st.session_state.innsendte_forslag, 1):
             st.markdown(f"**{idx}. {kat}**\n\n{txt}")
