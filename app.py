@@ -5,7 +5,7 @@ from streamlit_folium import st_folium
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_openai import OpenAIEmbeddings, OpenAI
+from langchain_openai import OpenAIEmbeddings
 from langchain.chains import RetrievalQA
 import os
 import tempfile
@@ -48,7 +48,7 @@ if uploaded_file:
 else:
     pdf_path = områdeinfo[områdevalg]["pdf"]
 
-# 🧠 Lag RAG-modell (cached)
+# 🧐 Lag RAG-modell (cached)
 @st.cache_resource
 def setup_bot(pdf_file_path):
     loader = PyPDFLoader(pdf_file_path)
@@ -56,7 +56,7 @@ def setup_bot(pdf_file_path):
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
     chunks = splitter.split_documents(docs)
     vectordb = FAISS.from_documents(chunks, OpenAIEmbeddings())
-    return RetrievalQA.from_chain_type(llm=OpenAI(), retriever=vectordb.as_retriever())
+    return RetrievalQA.from_chain_type(llm=ChatOpenAI(model="gpt-3.5-turbo"), retriever=vectordb.as_retriever())
 
 @st.cache_resource
 def setup_kommuneplan():
@@ -74,8 +74,6 @@ def setup_kommuneplan():
     return vectorstore.as_retriever()
 
 kommuneplan_retriever = setup_kommuneplan()
-
-
 qa = setup_bot(pdf_path)
 
 # 📍 KART
@@ -102,7 +100,7 @@ folium.LayerControl().add_to(m)
 # 📐 Layout: venstre = kart, høyre = chatbot
 col1, col2 = st.columns([1.5, 1])
 
-# 🗺️ VENSTRE: Kart
+# 🗜️ VENSTRE: Kart
 with col1:
     st.subheader("🌍 Kart over Tromsø")
     st_folium(m, width=700, height=500)
@@ -127,12 +125,13 @@ with col2:
     for spm in forslag:
         if st.button(spm):
             st.session_state.input_q = spm
-            
+
+    # 🔹 Analyseknapp
     st.markdown("---")
-st.subheader("📊 Analyse: Er planen i tråd med kommunens mål?")
-if st.button("Analyser mot kommuneplanen"):
-    with st.spinner("Sammenligner med kommuneplanens mål..."):
-        analyse_prompt = """
+    st.subheader("📊 Analyse: Er planen i tråd med kommunens mål?")
+    if st.button("Analyser mot kommuneplanen"):
+        with st.spinner("Sammenligner med kommuneplanens mål..."):
+            analyse_prompt = """
 Du har tilgang til Tromsø kommunes overordnede mål gjennom kommuneplanens samfunnsdel og KPA.
 Vurder i hvilken grad den valgte reguleringsplanen er i tråd med:
 - bærekraftig utvikling
@@ -142,13 +141,11 @@ Vurder i hvilken grad den valgte reguleringsplanen er i tråd med:
 - andre relevante føringer
 Svar tydelig og konkret.
 """
-        from langchain_openai import ChatOpenAI
-        llm = OpenAI(model="gpt-3.5-turbo")
-        analyse_chain = RetrievalQA.from_chain_type(llm=llm, retriever=kommuneplan_retriever)
-        vurdering = analyse_chain.run(analyse_prompt)
-        st.success("Analyse fullført")
-        st.markdown(f"**AI-vurdering:**\n\n{vurdering}")
-
+            llm = ChatOpenAI(model="gpt-3.5-turbo")
+            analyse_chain = RetrievalQA.from_chain_type(llm=llm, retriever=kommuneplan_retriever)
+            vurdering = analyse_chain.run(analyse_prompt)
+            st.success("Analyse fullført")
+            st.markdown(f"**AI-vurdering:**\n\n{vurdering}")
 
     # 🔤 Inntastingsfelt
     user_input = st.text_input("Skriv inn spørsmål:", key="input_q")
@@ -165,15 +162,15 @@ Svar tydelig og konkret.
         with st.chat_message("assistant"):
             st.markdown(f"**Svar:** {a}")
 
-    # 📥 Eksport som tekstfil
+    # 📅 Eksport som tekstfil
     if st.session_state.chat_history:
         full_chat = "\n\n".join([f"Spørsmål: {q}\nSvar: {a}" for q, a in st.session_state.chat_history])
         st.download_button("📄 Last ned samtalen", full_chat, file_name="chat_samtale.txt")
-    # Drop-down meny som viser forslag til analyser
-    st.sidebar.markdown("---")
+
+# 🔹 Sidebar: forslag til analyser
+st.sidebar.markdown("---")
 st.sidebar.header("💡 Foreslå analyseidé")
 
-# Dropdown for kategorivalg
 kategori = st.sidebar.selectbox("Velg datasett eller tema:", [
     "Matrikkeldata",
     "Brønnøysundregisteret",
@@ -183,14 +180,12 @@ kategori = st.sidebar.selectbox("Velg datasett eller tema:", [
     "Andre"
 ])
 
-# Tekstinput
 analyseforslag = st.sidebar.text_area(
     "Beskriv hva du ønsker at vi skal analysere eller undersøke:",
     height=150,
     placeholder="Eks: Kan vi koble eiendomsskatt med tomtestørrelser for å avsløre skjevheter?"
 )
 
-# Knapp for innsending
 if st.sidebar.button("Send inn forslag"):
     if analyseforslag.strip():
         if "innsendte_forslag" not in st.session_state:
@@ -200,8 +195,7 @@ if st.sidebar.button("Send inn forslag"):
     else:
         st.sidebar.warning("Skriv inn et forslag før du sender.")
 
-# Valgfritt: vis innsendte forslag i hoveddelen
-with st.expander("📝 Se innsendte forslag (midlertidig lagret)"):
+with st.expander("📜 Se innsendte forslag (midlertidig lagret)"):
     if "innsendte_forslag" in st.session_state:
         for idx, (kat, txt) in enumerate(st.session_state.innsendte_forslag, 1):
             st.markdown(f"**{idx}. {kat}**\n\n{txt}")
