@@ -1,6 +1,3 @@
-from pathlib import Path
-
-
 import streamlit as st
 from langchain_openai import ChatOpenAI
 import folium
@@ -51,6 +48,7 @@ if uploaded_file:
 else:
     pdf_path = områdeinfo[områdevalg]["pdf"]
 
+# 🧠 Lag RAG-modell for chat
 @st.cache_resource
 def setup_bot(pdf_file_path):
     loader = PyPDFLoader(pdf_file_path)
@@ -62,12 +60,25 @@ def setup_bot(pdf_file_path):
 
 qa = setup_bot(pdf_path)
 
+# 🧠 Lag RAG-modell for analyse (kombinerer reguleringsplan + kommuneplan)
 @st.cache_resource
-def last_inn_tekst(pdf_fil):
-    loader = PyPDFLoader(pdf_fil)
-    docs = loader.load()
-    tekst = "\\n\\n".join([doc.page_content for doc in docs])
-    return tekst
+def setup_sammenligning(pdf_file_path):
+    # Last inn reguleringsplan
+    loader = PyPDFLoader(pdf_file_path)
+    reg_docs = loader.load()
+
+    # Last inn kommuneplaner
+    kp_docs = []
+    for fil in ["Planer/kommuneplanens_samfunnsdel_2020.pdf", "Planer/kpa.pdf"]:
+        kp_docs.extend(PyPDFLoader(fil).load())
+
+    # Slå sammen
+    alle_docs = reg_docs + kp_docs
+
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+    chunks = splitter.split_documents(alle_docs)
+    vectordb = FAISS.from_documents(chunks, OpenAIEmbeddings())
+    return RetrievalQA.from_chain_type(llm=ChatOpenAI(model="gpt-3.5-turbo"), retriever=vectordb.as_retriever())
 
 # 📍 KART
 koordinater = områdeinfo[områdevalg]["koordinater"]
@@ -79,6 +90,7 @@ folium.Marker(
     tooltip="Klikk for mer info"
 ).add_to(m)
 
+# ➕ Kartlag
 folium.TileLayer("OpenStreetMap", name="Standard").add_to(m)
 folium.TileLayer("Stamen Terrain", name="Topografisk", attr="Stamen").add_to(m)
 folium.TileLayer("Stamen Toner", name="Reguleringsplan", attr="Stamen").add_to(m)
@@ -89,19 +101,23 @@ folium.TileLayer(
 ).add_to(m)
 folium.LayerControl().add_to(m)
 
+# 📐 Layout: venstre = kart, høyre = chatbot
 col1, col2 = st.columns([1.5, 1])
 
+# 🗺️ VENSTRE: Kart
 with col1:
     st.subheader("🌍 Kart over Tromsø")
     st_folium(m, width=700, height=500)
     st.write(f"📍 Du ser nå på: **{områdevalg}**")
 
+# 💬 HØYRE: Chatbot med historikk og forslag
 with col2:
     st.subheader("🤖 Spør AI om reguleringsplanen")
 
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
 
+    # 💡 Spørsmålsforslag
     forslag = [
         "Hva sier planen om byggehøyder?",
         "Hva er formålet med reguleringen?",
@@ -114,6 +130,7 @@ with col2:
         if st.button(spm):
             st.session_state.input_q = spm
 
+    # 🔤 Inntastingsfelt
     user_input = st.text_input("Skriv inn spørsmål:", key="input_q")
 
     if user_input:
@@ -121,6 +138,7 @@ with col2:
             response = qa.invoke(user_input)
             st.session_state.chat_history.append((user_input, response))
 
+    # 🧾 Vis som chatbobler
     for q, a in st.session_state.chat_history:
         with st.chat_message("user"):
             st.markdown(f"**Du:** {q}")
@@ -131,32 +149,58 @@ with col2:
     st.subheader("📊 Analyse: Er planen i tråd med kommunens mål?")
 
     if st.button("Analyser mot kommuneplanen"):
-        with st.spinner("Laster dokumenter..."):
-            regtekst = last_inn_tekst(pdf_path)
-            kpatekst = last_inn_tekst("Planer/kpa.pdf")
-            samftekst = last_inn_tekst("Planer/kommuneplanens_samfunnsdel_2020.pdf")
-
-            full_prompt = f\"""Du er arealplanlegger og journalist. Du har fått tilgang til følgende reguleringsplan:
-
---- REGULERINGSPLAN ---
-{regtekst}
-
---- KOMMUNEPLANENS AREALDEL (KPA) ---
-{kpatekst}
-
---- KOMMUNEPLANENS SAMFUNNSDEL ---
-{samftekst}
-
-Basert på dette, vurder:
-1. Er reguleringsplanen i tråd med bærekraftsmålene i samfunnsplanen?
-2. Følger den føringene i KPA, særlig med tanke på grøntområder, høyder og fortetting?
-3. Hvilke avvik finnes, og hvordan kan disse vinkles journalistisk?
-
+        with st.spinner("Sammenligner med kommuneplanens mål..."):
+            analyse_prompt = """
+Du har tilgang til både reguleringsplanen og Tromsø kommunes overordnede mål (kommuneplan og KPA).
+Vurder i hvilken grad denne reguleringsplanen er i tråd med:
+- bærekraftig utvikling
+- arealstrategi
+- krav til grøntområder
+- byggehøyder og fortetting
+- andre relevante føringer
 Svar tydelig og konkret.
-\"""
+"""
+            analyse_chain = setup_sammenligning(pdf_path)
+            vurdering = analyse_chain.run(analyse_prompt)
+            st.success("Analyse fullført")
+            st.markdown(f"**AI-vurdering:**\n\n{vurdering}")
 
-            llm = ChatOpenAI(model="gpt-3.5-turbo")
-            vurdering = llm.invoke(full_prompt)
+# 📥 Eksport som tekstfil
+if st.session_state.chat_history:
+    full_chat = "\n\n".join([f"Spørsmål: {q}\nSvar: {a}" for q, a in st.session_state.chat_history])
+    st.download_button("📄 Last ned samtalen", full_chat, file_name="chat_samtale.txt")
 
-        st.success("Analyse fullført")
-        st.markdown(f"**AI-vurdering:**\\n\\n{vurdering}")
+# 💡 Foreslå analyseidé
+st.sidebar.markdown("---")
+st.sidebar.header("💡 Foreslå analyseidé")
+
+kategori = st.sidebar.selectbox("Velg datasett eller tema:", [
+    "Matrikkeldata",
+    "Brønnøysundregisteret",
+    "Skattedata",
+    "Befolkningsdata",
+    "Grunnboken",
+    "Andre"
+])
+
+analyseforslag = st.sidebar.text_area(
+    "Beskriv hva du ønsker at vi skal analysere eller undersøke:",
+    height=150,
+    placeholder="Eks: Kan vi koble eiendomsskatt med tomtestørrelser for å avsløre skjevheter?"
+)
+
+if st.sidebar.button("Send inn forslag"):
+    if analyseforslag.strip():
+        if "innsendte_forslag" not in st.session_state:
+            st.session_state.innsendte_forslag = []
+        st.session_state.innsendte_forslag.append((kategori, analyseforslag))
+        st.sidebar.success("✅ Forslaget er registrert – takk!")
+    else:
+        st.sidebar.warning("Skriv inn et forslag før du sender.")
+
+with st.expander("📝 Se innsendte forslag (midlertidig lagret)"):
+    if "innsendte_forslag" in st.session_state:
+        for idx, (kat, txt) in enumerate(st.session_state.innsendte_forslag, 1):
+            st.markdown(f"**{idx}. {kat}**\n\n{txt}")
+    else:
+        st.info("Ingen forslag enda.")
