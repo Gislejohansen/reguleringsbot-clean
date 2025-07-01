@@ -1,3 +1,4 @@
+
 import streamlit as st
 from langchain_openai import ChatOpenAI
 import folium
@@ -111,11 +112,17 @@ with col2:
             response = qa.invoke(user_input)
             st.session_state.chat_history.append((user_input, response))
 
-    for q, a in st.session_state.chat_history:
-        with st.chat_message("user"):
-            st.markdown(f"**Du:** {q}")
-        with st.chat_message("assistant"):
-            st.markdown(f"**Svar:** {a}")
+    if st.session_state.chat_history:
+        for q, a in st.session_state.chat_history:
+            with st.chat_message("user"):
+                st.markdown(f"**Du:** {q}")
+            with st.chat_message("assistant"):
+                st.markdown(f"**Svar:** {a}")
+        st.download_button(
+            "📄 Last ned samtalen",
+            "\n\n".join([f"Spørsmål: {q}\nSvar: {a}" for q, a in st.session_state.chat_history]),
+            file_name="chat_samtale.txt"
+        )
 
     st.markdown("---")
     st.subheader("📊 Analyse: Er planen i tråd med kommunens mål?")
@@ -126,8 +133,7 @@ with col2:
             kpatekst = last_inn_tekst("Planer/kpa.pdf")
             samftekst = last_inn_tekst("Planer/kommuneplanens_samfunnsdel_2020.pdf")
 
-            full_prompt = f"""
-Du er arealplanlegger og journalist. Du har fått tilgang til følgende reguleringsplan:
+            full_prompt = f"""Du er arealplanlegger og journalist. Du har fått tilgang til følgende reguleringsplan:
 
 --- REGULERINGSPLAN ---
 {regtekst}
@@ -145,9 +151,43 @@ Basert på dette, vurder:
 
 Svar tydelig og konkret.
 """
-
             llm = ChatOpenAI(model="gpt-3.5-turbo")
             vurdering = llm.invoke(full_prompt)
 
         st.success("Analyse fullført")
         st.markdown(f"**AI-vurdering:**\n\n{vurdering}")
+
+# 🔄 Sidebar: Foreslå analyser
+st.sidebar.markdown("---")
+st.sidebar.header("💡 Foreslå analyseidé")
+
+kategori = st.sidebar.selectbox("Velg datasett eller tema:", [
+    "Matrikkeldata",
+    "Brønnøysundregisteret",
+    "Skattedata",
+    "Befolkningsdata",
+    "Grunnboken",
+    "Andre"
+])
+
+analyseforslag = st.sidebar.text_area(
+    "Beskriv hva du ønsker at vi skal analysere eller undersøke:",
+    height=150,
+    placeholder="Eks: Kan vi koble eiendomsskatt med tomtestørrelser for å avsløre skjevheter?"
+)
+
+if st.sidebar.button("Send inn forslag"):
+    if analyseforslag.strip():
+        if "innsendte_forslag" not in st.session_state:
+            st.session_state.innsendte_forslag = []
+        st.session_state.innsendte_forslag.append((kategori, analyseforslag))
+        st.sidebar.success("✅ Forslaget er registrert – takk!")
+    else:
+        st.sidebar.warning("Skriv inn et forslag før du sender.")
+
+with st.expander("📝 Se innsendte forslag (midlertidig lagret)"):
+    if "innsendte_forslag" in st.session_state:
+        for idx, (kat, txt) in enumerate(st.session_state.innsendte_forslag, 1):
+            st.markdown(f"**{idx}. {kat}**\n\n{txt}")
+    else:
+        st.info("Ingen forslag enda.")
