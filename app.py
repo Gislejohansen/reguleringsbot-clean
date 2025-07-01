@@ -129,9 +129,18 @@ with col2:
 
     if st.button("Analyser mot kommuneplanen"):
         with st.spinner("Laster og analyserer dokumenter..."):
-            regtekst = last_inn_tekst(pdf_path)
-            kpatekst = last_inn_tekst("Planer/kpa.pdf")
-            samftekst = last_inn_tekst("Planer/kommuneplanens_samfunnsdel_2020.pdf")
+            from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+def hent_avsnitt(pdf_fil, maks_tegn=3000):
+    loader = PyPDFLoader(pdf_fil)
+    docs = loader.load()
+    tekst = "\n\n".join([doc.page_content for doc in docs])
+    return tekst[:maks_tegn]
+
+regtekst = hent_avsnitt(pdf_path)
+kpatekst = hent_avsnitt("Planer/kpa.pdf")
+samftekst = hent_avsnitt("Planer/kommuneplanens_samfunnsdel_2020.pdf")
+
 
             full_prompt = f"""Du er arealplanlegger og journalist. Du har fått tilgang til følgende reguleringsplan:
 
