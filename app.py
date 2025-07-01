@@ -142,7 +142,7 @@ kpatekst = hent_avsnitt("Planer/kpa.pdf")
 samftekst = hent_avsnitt("Planer/kommuneplanens_samfunnsdel_2020.pdf")
 
 
-            full_prompt = f"""Du er arealplanlegger og journalist. Du har fått tilgang til følgende reguleringsplan:
+full_prompt = f"""Du er arealplanlegger og journalist. Du har fått tilgang til følgende reguleringsplan:
 
 --- REGULERINGSPLAN ---
 {regtekst}
