@@ -1,7 +1,3 @@
-
-from pathlib import Path
-
-
 import streamlit as st
 from langchain_openai import ChatOpenAI
 import folium
@@ -57,12 +53,10 @@ def setup_bot(pdf_file_path):
     vectordb = FAISS.from_documents(chunks, OpenAIEmbeddings())
     return RetrievalQA.from_chain_type(llm=ChatOpenAI(model="gpt-3.5-turbo"), retriever=vectordb.as_retriever())
 
-qa = setup_bot(pdf_path)
-
 def last_inn_tekst(pdf_fil):
     loader = PyPDFLoader(pdf_fil)
     docs = loader.load()
-    tekst = "\\n\\n".join([doc.page_content for doc in docs])
+    tekst = "\n\n".join([doc.page_content for doc in docs])
     return tekst
 
 koordinater = områdeinfo[områdevalg]["koordinater"]
@@ -112,7 +106,8 @@ with col2:
     user_input = st.text_input("Skriv inn spørsmål:", key="input_q")
 
     if user_input:
-        with st.spinner("Tenker..."):
+        with st.spinner("Henter reguleringsplan og tenker..."):
+            qa = setup_bot(pdf_path)
             response = qa.invoke(user_input)
             st.session_state.chat_history.append((user_input, response))
 
@@ -131,7 +126,8 @@ with col2:
             kpatekst = last_inn_tekst("Planer/kpa.pdf")
             samftekst = last_inn_tekst("Planer/kommuneplanens_samfunnsdel_2020.pdf")
 
-            full_prompt = f"""Du er arealplanlegger og journalist. Du har fått tilgang til følgende reguleringsplan:
+            full_prompt = f"""
+Du er arealplanlegger og journalist. Du har fått tilgang til følgende reguleringsplan:
 
 --- REGULERINGSPLAN ---
 {regtekst}
@@ -148,11 +144,10 @@ Basert på dette, vurder:
 3. Hvilke avvik finnes, og hvordan kan disse vinkles journalistisk?
 
 Svar tydelig og konkret.
-\"""
+"""
 
             llm = ChatOpenAI(model="gpt-3.5-turbo")
             vurdering = llm.invoke(full_prompt)
 
         st.success("Analyse fullført")
-        st.markdown(f"**AI-vurdering:**\\n\\n{vurdering}")
-
+        st.markdown(f"**AI-vurdering:**\n\n{vurdering}")
