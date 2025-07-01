@@ -131,7 +131,7 @@ with col2:
             kpatekst = last_inn_tekst("Planer/kpa.pdf")
             samftekst = last_inn_tekst("Planer/kommuneplanens_samfunnsdel_2020.pdf")
 
-            full_prompt = f\"""Du er arealplanlegger og journalist. Du har fått tilgang til følgende reguleringsplan:
+            full_prompt = f"""Du er arealplanlegger og journalist. Du har fått tilgang til følgende reguleringsplan:
 
 --- REGULERINGSPLAN ---
 {regtekst}
@@ -155,3 +155,4 @@ Svar tydelig og konkret.
 
         st.success("Analyse fullført")
         st.markdown(f"**AI-vurdering:**\\n\\n{vurdering}")
+
