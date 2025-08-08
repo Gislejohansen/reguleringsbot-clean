@@ -2,8 +2,48 @@ import os
 import tempfile
 import base64
 import re
-
+import pandas as pd
 import streamlit as st
+st.set_page_config(page_title="Samleportal for data", layout="wide")
+sidevalg = st.sidebar.radio("Velg side:", ["Hovedside", "Reguleringsbot"])
+if sidevalg == "Hovedside":
+    st.title("Samleportal for data")
+    st.markdown(
+        '''
+        Velkommen til Samleportal for data!
+
+        Her finner du ulike moduler for analyse, visualisering og AI-tjenester knyttet til reguleringsplaner, eiendomsdata og mer.
+        
+        Dette er en app for å enkelt kunne navigere seg gjennom de forskjellige kildene til data vi har tilgjengelig, med funksjoner som:
+        
+        1) Ulike kartlag for Tromsø (og Norge)
+        2) dokumentopplastning av reguleringsplaner som automatisk fører deg til planens lokasjon på kartet 
+        3) AI-chat og oppsummering av planer 
+        4) Analyse av planer 
+        5) Visualisering av boligpriser og bedrifter i Tromsø
+        6) Foreslå egne analyser og få tilbakemelding
+        
+        
+        '''
+    )
+
+if sidevalg == "Reguleringsbot":
+    import os
+    import tempfile
+    import base64
+    import re
+    # --- Konfigurasjon Poppler for Windows ---
+    @st.cache_data(show_spinner=False)
+    def summarize_plan(path: str, lengde: str = "kort") -> str:
+        text = hent_avsnitt(path, maks_tegn=3000)
+        prompt = (
+            "Du er en erfaren arealplanlegger. "
+            + ("Gi meg en veldig kort oppsummering (2 setninger):\n\n" if lengde=="very_kort" else
+               "Gi meg en kort oppsummering (3–4 setninger):\n\n")
+            + text
+        )
+        return llm.invoke(prompt).content
+    # Resten av din eksisterende kode følger her, uendret
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -196,6 +236,7 @@ if st.session_state["vis_kart"]:
         if not coords:
             coords = extract_coordinates_from_pdf(pdf_path)
 
+
         # Lagre første side som bilde
         try:
             images = convert_from_path(
@@ -217,6 +258,15 @@ if st.session_state["vis_kart"]:
         except Exception as e:
             st.warning(f"Kunne ikke generere bilde fra PDF: {e}")
             st.session_state["planbilde_b64"] = None
+
+        # Last ned planbilde-knapp
+        if st.session_state.get("planbilde_b64"):
+            st.download_button(
+                label="⬇️ Last ned planbilde (PNG)",
+                data=base64.b64decode(st.session_state["planbilde_b64"]),
+                file_name="plan_side1.png",
+                mime="image/png"
+            )
 
         # Manuell fallback om ingen koordinater
         if not coords:
@@ -413,6 +463,13 @@ with col2:
                     st.write(f"...{utdrag}...")
         else:
             st.info("Ingen treff i PDF.")
+
+    # 📝 Oppsummering
+    st.subheader("📝 Oppsummer plan")
+    lengde = st.selectbox("Lengde:", ["kort", "very_kort"], key="summary_length")
+    if st.button("Oppsummer plan", key="btn_summary"):
+        summary = summarize_plan(pdf_path, lengde)
+        st.markdown(f"> {summary}")
     st.subheader("🤖 Spør AI om reguleringsplanen")
 
     if "chat_history" not in st.session_state:
@@ -451,6 +508,17 @@ with col2:
                 for i, kilde in enumerate(kilder, 1):
                     utdrag = kilde.page_content[:600]
                     st.markdown(f"**Kilde {i}:**\n\n{utdrag}...")
+
+        # Klargjør CSV
+        df_chat = pd.DataFrame(st.session_state.chat_history, columns=["Spørsmål","Svar","Kilder"])
+        df_chat = df_chat.drop(columns=["Kilder"])  # Kun spørsmål og svar til CSV
+        csv = df_chat.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="⬇️ Last ned chat-historikk (CSV)",
+            data=csv,
+            file_name="chat_history.csv",
+            mime="text/csv"
+        )
 
     st.subheader("📊 Analyse: Er planen i tråd med kommunens mål?")
     if st.button("Analyser mot kommuneplanen"):
