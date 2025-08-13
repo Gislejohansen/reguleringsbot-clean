@@ -236,8 +236,6 @@ else:
     koordinater = None
     st.session_state["planbilde_b64"] = None
 
-st.write(st.session_state.get("vis_kart"))
-
 # Layout: kart og chat
 col1, col2 = st.columns([2, 1])
 
@@ -256,7 +254,13 @@ kartlagvalg = st.sidebar.selectbox(
 
 # Kart-faner
 with col1:
-    tabs = st.tabs(["📍 Reguleringsplan", "💰 Boligpriser", "🏢 Bedrifter i Tromsø", "🏡 Fremtidig boligbygging"])
+    tabs = st.tabs([
+        "📍 Reguleringsplan",
+        "💰 Boligpriser",
+        "🏢 Bedrifter i Tromsø",
+        "🏡 Fremtidig boligbygging",
+        "🔄 Boligområder med størst turnover",
+    ])
 
     # --- Reguleringsplan ---
     with tabs[0]:
@@ -295,18 +299,17 @@ with col1:
 
         # Kartlag
         tile_layers = {
-            "OpenStreetMap": folium.TileLayer("OpenStreetMap", name="OpenStreetMap"),
-            "Stamen Terrain": folium.TileLayer("Stamen Terrain", attr="Stamen Design", name="Stamen Terrain"),
-            "Stamen Toner": folium.TileLayer("Stamen Toner", attr="Stamen Design", name="Stamen Toner"),
-            "Satellitt (Google)": folium.TileLayer(
-                tiles="http://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
-                attr="Google", name="Satellitt (Google)")
+            "OpenStreetMap": {"tiles": "OpenStreetMap", "name": "OpenStreetMap"},
+            "Stamen Terrain": {"tiles": "Stamen Terrain", "attr": "Stamen Design", "name": "Stamen Terrain"},
+            "Stamen Toner": {"tiles": "Stamen Toner", "attr": "Stamen Design", "name": "Stamen Toner"},
+            "Satellitt (Google)": {
+                "tiles": "http://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+                "attr": "Google",
+                "name": "Satellitt (Google)"
+            }
         }
-        for navn, lag in tile_layers.items():
-            if navn == kartlagvalg:
-                lag.add_to(m)
-            else:
-                lag.add_to(m)
+        for navn, params in tile_layers.items():
+            folium.TileLayer(**params, show=(navn == kartlagvalg)).add_to(m)
         folium.LayerControl().add_to(m)
         st_folium(m, width=900, height=600, key=f"kart_{kartlagvalg}")
 
@@ -393,65 +396,19 @@ with col1:
     # --- Fremtidig boligbygging ---
     with tabs[3]:
         st.subheader("🏡 Fremtidig boligbygging")
-        st.info("Her kan du vise eller analysere fremtidige boligprosjekter i Tromsø. (Innhold kan tilpasses)")
+        st.info(
+            "Her kan du vise eller analysere fremtidige boligprosjekter i Tromsø. (Innhold kan tilpasses)"
+        )
+
+    # --- Boligområder med størst turnover ---
+    with tabs[4]:
+        st.subheader("🔄 Boligområder med størst turnover")
+        st.info(
+            "Her kan du se hvilke områder som har høyest omsetning av boliger. (Innhold kan tilpasses)"
+        )
 
 # 💬 Chat og analyse
 with col2:
-    st.subheader("🔎 Fulltekst-søk i PDF")
-    term = st.text_input("Søk i plan:")
-    if term and pdf_path:
-        docs = PyPDFLoader(pdf_path).load()
-        treff = []
-        for i, d in enumerate(docs, 1):
-            for m in re.finditer(re.escape(term), d.page_content, re.IGNORECASE):
-                s = max(m.start()-40, 0); e = min(m.end()+40, len(d.page_content))
-                snippet = d.page_content[s:e].replace("\n", " ")
-                treff.append((i, snippet))
-        if treff:
-            for side, utdrag in treff:
-                with st.expander(f"Side {side}"):
-                    st.write(f"...{utdrag}...")
-        else:
-            st.info("Ingen treff i PDF.")
-    st.subheader("🤖 Spør AI om reguleringsplanen")
-
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
-
-    forslag = [
-        "Hva sier planen om byggehøyder?",
-        "Hva er formålet med reguleringen?",
-        "Finnes det krav til uteområder?",
-        "Hva er regulert til næring?",
-        "Hvordan påvirker planen nabolaget?"
-    ]
-    st.markdown("**Eksempler på spørsmål:**")
-    for i, spm in enumerate(forslag):
-        if st.button(spm, key=f"forslag_{i}"):
-            st.session_state.input_q = spm
-
-    user_input = st.text_input(
-        "Skriv inn spørsmål:", key="input_q", value=st.session_state.get("input_q", "")
-    )
-
-    if user_input:
-        with st.spinner("Tenker..."):
-            qa = setup_bot(pdf_path)
-            response = qa.invoke({"query": user_input})
-            svar = response["result"]
-            kilder = response["source_documents"]
-            st.session_state.chat_history.append((user_input, svar, kilder))
-
-    if st.session_state.chat_history:
-        st.markdown("### 🗣️ Chat-historikk")
-        for q, a, kilder in st.session_state.chat_history:
-            st.markdown(f"**Du:** {q}")
-            st.markdown(f"**Svar:** {a}")
-            with st.expander("📄 Kilder i planen"):
-                for i, kilde in enumerate(kilder, 1):
-                    utdrag = kilde.page_content[:600]
-                    st.markdown(f"**Kilde {i}:**\n\n{utdrag}...")
-
     st.subheader("📊 Analyse: Er planen i tråd med kommunens mål?")
     if st.button("Analyser mot kommuneplanen"):
         with st.spinner("Laster og analyserer dokumenter..."):
@@ -484,7 +441,61 @@ Svar tydelig og konkret.
                 unsafe_allow_html=True
             )
 
+    st.subheader("🔎 Fulltekst-søk i PDF")
+    term = st.text_input("Søk i plan:")
+    if term and pdf_path:
+        docs = PyPDFLoader(pdf_path).load()
+        treff = []
+        for i, d in enumerate(docs, 1):
+            for m in re.finditer(re.escape(term), d.page_content, re.IGNORECASE):
+                s = max(m.start()-40, 0); e = min(m.end()+40, len(d.page_content))
+                snippet = d.page_content[s:e].replace("\n", " ")
+                treff.append((i, snippet))
+        if treff:
+            for side, utdrag in treff:
+                with st.expander(f"Side {side}"):
+                    st.write(f"...{utdrag}...")
+        else:
+            st.info("Ingen treff i PDF.")
 
+    st.subheader("🤖 Spør AI om reguleringsplanen")
+
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+
+    forslag = [
+        "Hva sier planen om byggehøyder?",
+        "Hva er formålet med reguleringen?",
+        "Finnes det krav til uteområder?",
+        "Hva er regulert til næring?",
+        "Hvordan påvirker planen nabolaget?",
+    ]
+    st.markdown("**Eksempler på spørsmål:**")
+    for i, spm in enumerate(forslag):
+        if st.button(spm, key=f"forslag_{i}"):
+            st.session_state.input_q = spm
+
+    user_input = st.text_input(
+        "Skriv inn spørsmål:", key="input_q", value=st.session_state.get("input_q", "")
+    )
+
+    if user_input:
+        with st.spinner("Tenker..."):
+            qa = setup_bot(pdf_path)
+            response = qa.invoke({"query": user_input})
+            svar = response["result"]
+            kilder = response["source_documents"]
+            st.session_state.chat_history.append((user_input, svar, kilder))
+
+    if st.session_state.chat_history:
+        st.markdown("### 🗣️ Chat-historikk")
+        for q, a, kilder in st.session_state.chat_history:
+            st.markdown(f"**Du:** {q}")
+            st.markdown(f"**Svar:** {a}")
+            with st.expander("📄 Kilder i planen"):
+                for i, kilde in enumerate(kilder, 1):
+                    utdrag = kilde.page_content[:600]
+                    st.markdown(f"**Kilde {i}:**\n\n{utdrag}...")
 
 # Funksjon for å hente tekst-avsnitt til analyse
  

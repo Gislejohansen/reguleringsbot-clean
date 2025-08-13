@@ -286,8 +286,6 @@ else:
     koordinater = None
     st.session_state["planbilde_b64"] = None
 
-st.write(st.session_state.get("vis_kart"))
-
 # Layout: kart og chat
 col1, col2 = st.columns([2, 1])
 
@@ -306,7 +304,13 @@ kartlagvalg = st.sidebar.selectbox(
 
 # Kart-faner
 with col1:
-    tabs = st.tabs(["📍 Reguleringsplan", "💰 Boligpriser", "🏢 Bedrifter i Tromsø", "🏡 Fremtidig boligbygging"])
+    tabs = st.tabs([
+        "📍 Reguleringsplan",
+        "💰 Boligpriser",
+        "🏢 Bedrifter i Tromsø",
+        "🏡 Fremtidig boligbygging",
+        "🔄 Boligområder med størst turnover",
+    ])
 
     # --- Reguleringsplan ---
     with tabs[0]:
@@ -345,18 +349,17 @@ with col1:
 
         # Kartlag
         tile_layers = {
-            "OpenStreetMap": folium.TileLayer("OpenStreetMap", name="OpenStreetMap"),
-            "Stamen Terrain": folium.TileLayer("Stamen Terrain", attr="Stamen Design", name="Stamen Terrain"),
-            "Stamen Toner": folium.TileLayer("Stamen Toner", attr="Stamen Design", name="Stamen Toner"),
-            "Satellitt (Google)": folium.TileLayer(
-                tiles="http://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
-                attr="Google", name="Satellitt (Google)")
+            "OpenStreetMap": {"tiles": "OpenStreetMap", "name": "OpenStreetMap"},
+            "Stamen Terrain": {"tiles": "Stamen Terrain", "attr": "Stamen Design", "name": "Stamen Terrain"},
+            "Stamen Toner": {"tiles": "Stamen Toner", "attr": "Stamen Design", "name": "Stamen Toner"},
+            "Satellitt (Google)": {
+                "tiles": "http://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+                "attr": "Google",
+                "name": "Satellitt (Google)"
+            }
         }
-        for navn, lag in tile_layers.items():
-            if navn == kartlagvalg:
-                lag.add_to(m)
-            else:
-                lag.add_to(m)
+        for navn, params in tile_layers.items():
+            folium.TileLayer(**params, show=(navn == kartlagvalg)).add_to(m)
         folium.LayerControl().add_to(m)
         st_folium(m, width=900, height=600, key=f"kart_{kartlagvalg}")
 
@@ -443,10 +446,51 @@ with col1:
     # --- Fremtidig boligbygging ---
     with tabs[3]:
         st.subheader("🏡 Fremtidig boligbygging")
-        st.info("Her kan du vise eller analysere fremtidige boligprosjekter i Tromsø. (Innhold kan tilpasses)")
+        st.info(
+            "Her kan du vise eller analysere fremtidige boligprosjekter i Tromsø. (Innhold kan tilpasses)"
+        )
+
+    # --- Boligområder med størst turnover ---
+    with tabs[4]:
+        st.subheader("🔄 Boligområder med størst turnover")
+        st.info(
+            "Her kan du se hvilke områder som har høyest omsetning av boliger. (Innhold kan tilpasses)"
+        )
 
 # 💬 Chat og analyse
 with col2:
+    st.subheader("📊 Analyse: Er planen i tråd med kommunens mål?")
+    if st.button("Analyser mot kommuneplanen"):
+        with st.spinner("Laster og analyserer dokumenter..."):
+            st.session_state.regtekst = hent_avsnitt(pdf_path)
+            st.session_state.kpatekst = hent_avsnitt("Planer/kpa.pdf")
+            st.session_state.samftekst = hent_avsnitt("Planer/kommuneplanens_samfunnsdel_2020.pdf")
+
+            full_prompt = f"""Du er arealplanlegger og journalist. Du har fått tilgang til følgende reguleringsplan:
+
+--- REGULERINGSPLAN ---
+{st.session_state.regtekst}
+
+--- KOMMUNEPLANENS AREALDEL (KPA) ---
+{st.session_state.kpatekst}
+
+--- KOMMUNEPLANENS SAMFUNNSDEL ---
+{st.session_state.samftekst}
+
+Basert på dette, vurder:
+1. Er reguleringsplanen i tråd med bærekraftsmålene i samfunnsplanen?
+2. Følger den føringene i KPA, særlig med tanke på grøntområder, høyder og fortetting?
+3. Hvilke avvik finnes, og hvordan kan disse vinkles journalistisk?
+
+Svar tydelig og konkret.
+"""
+            vurdering = llm.invoke(full_prompt).content
+            st.markdown("### 📋 AI-vurdering")
+            st.markdown(
+                f"<div class='scrollbox'>{vurdering.replace(chr(10), '<br>')}</div>",
+                unsafe_allow_html=True
+            )
+
     st.subheader("🔎 Fulltekst-søk i PDF")
     term = st.text_input("Søk i plan:")
     if term and pdf_path:
@@ -470,6 +514,7 @@ with col2:
     if st.button("Oppsummer plan", key="btn_summary"):
         summary = summarize_plan(pdf_path, lengde)
         st.markdown(f"> {summary}")
+
     st.subheader("🤖 Spør AI om reguleringsplanen")
 
     if "chat_history" not in st.session_state:
@@ -480,7 +525,7 @@ with col2:
         "Hva er formålet med reguleringen?",
         "Finnes det krav til uteområder?",
         "Hva er regulert til næring?",
-        "Hvordan påvirker planen nabolaget?"
+        "Hvordan påvirker planen nabolaget?",
     ]
     st.markdown("**Eksempler på spørsmål:**")
     for i, spm in enumerate(forslag):
@@ -517,42 +562,8 @@ with col2:
             label="⬇️ Last ned chat-historikk (CSV)",
             data=csv,
             file_name="chat_history.csv",
-            mime="text/csv"
+            mime="text/csv",
         )
-
-    st.subheader("📊 Analyse: Er planen i tråd med kommunens mål?")
-    if st.button("Analyser mot kommuneplanen"):
-        with st.spinner("Laster og analyserer dokumenter..."):
-            st.session_state.regtekst = hent_avsnitt(pdf_path)
-            st.session_state.kpatekst = hent_avsnitt("Planer/kpa.pdf")
-            st.session_state.samftekst = hent_avsnitt("Planer/kommuneplanens_samfunnsdel_2020.pdf")
-
-            full_prompt = f"""Du er arealplanlegger og journalist. Du har fått tilgang til følgende reguleringsplan:
-
---- REGULERINGSPLAN ---
-{st.session_state.regtekst}
-
---- KOMMUNEPLANENS AREALDEL (KPA) ---
-{st.session_state.kpatekst}
-
---- KOMMUNEPLANENS SAMFUNNSDEL ---
-{st.session_state.samftekst}
-
-Basert på dette, vurder:
-1. Er reguleringsplanen i tråd med bærekraftsmålene i samfunnsplanen?
-2. Følger den føringene i KPA, særlig med tanke på grøntområder, høyder og fortetting?
-3. Hvilke avvik finnes, og hvordan kan disse vinkles journalistisk?
-
-Svar tydelig og konkret.
-"""
-            vurdering = llm.invoke(full_prompt).content
-            st.markdown("### 📋 AI-vurdering")
-            st.markdown(
-                f"<div class='scrollbox'>{vurdering.replace(chr(10), '<br>')}</div>",
-                unsafe_allow_html=True
-            )
-
-
 
 # Funksjon for å hente tekst-avsnitt til analyse
  
