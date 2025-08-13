@@ -1,14 +1,86 @@
+# Importer nødvendige biblioteker
 import os
 import tempfile
 import base64
 import re
 import pandas as pd
 import streamlit as st
+import folium
+from streamlit_folium import st_folium
+
+# --- Toppbar + grupperte sidebar-seksjoner ---
+# Dette plasseres rett etter importene, før set_page_config og resten av logikken.
+st.markdown(
+    '''
+    <style>
+    .topbar {
+        background-color: #004d99;
+        padding: 1rem;
+        color: white;
+        font-family: 'Inter', sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .topbar a {
+        color: white;
+        margin: 0 0.5rem;
+        text-decoration: none;
+        font-weight: 600;
+    }
+    </style>
+    <div class="topbar">
+      <div><img src="https://placehold.co/40x40?text=T" alt="Logo" style="vertical-align:middle;"> <span style="font-size:1.5rem;">Samleportal</span></div>
+      <div>
+        <a href="#hovedside">Hovedside</a>
+        <a href="#reguleringsbot">Reguleringsbot</a>
+        <a href="#kontakt">Kontakt</a>
+      </div>
+    </div>
+    ''',
+    unsafe_allow_html=True
+)
+
+# Funksjon for brødsmuler
+def show_breadcrumbs(path_list):
+    crumbs = ' &raquo; '.join(f'<a href="#{p.lower()}">{p}</a>' for p in path_list)
+    st.markdown(f'<p style="font-size:0.9rem; color:#555;">{crumbs}</p>', unsafe_allow_html=True)
+
+# Sidebar med expander-gruppering
+with st.sidebar:
+    st.header("Innstillinger")
+    with st.expander("Data- og filopplasting", expanded=True):
+        st.file_uploader("Last opp reguleringsplan (PDF)", type="pdf")
+        st.selectbox("Velg plan/område", ["Plan A", "Plan B", "Plan C"])
+    with st.expander("Kart-innstillinger"):
+        st.selectbox("Kartlag:", ["OpenStreetMap", "Stamen Toner", "Satellitt"])
+        st.slider("Zoom-nivå:", min_value=10, max_value=18, value=13)
+    with st.expander("AI- og analysevalg"):
+        st.text_input("Søk i PDF:")
+        st.selectbox("Oppsummering:", ["Kort", "Very Kort"])
+        st.button("Analyser mot kommuneplanen")
+
+# --- Fortsett med eksisterende konfigurasjon ---
+# Sidekonfigurasjon
 st.set_page_config(page_title="Samleportal for data", layout="wide")
-sidevalg = st.sidebar.radio("Velg side:", ["Hovedside", "Reguleringsbot"])
-if sidevalg == "Hovedside":
-    st.title("Samleportal for data")
-    st.markdown(
+
+# Hovednavigasjon mellom sider
+du_valg = st.radio("Velg side:", ["Hovedside", "Reguleringsbot"])
+show_breadcrumbs(["Samleportal", du_valg])
+
+if du_valg == "Hovedside":
+    st.title("Hovedside")
+    st.markdown("-- Her kommer innholdet for hovedside --")
+
+elif du_valg == "Reguleringsbot":
+    st.title("Reguleringsbot")
+    st.markdown("-- Her kommer koden for reguleringsbot-modulen --")
+    # Eksempel: vis et kart
+    m = folium.Map(location=[69.65, 18.95], zoom_start=13)
+    st_folium(m, width=700, height=400)
+    
+# Resten av appen din følger her...```
+st.markdown(
         '''
         Velkommen til Samleportal for data!
 
