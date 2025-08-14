@@ -67,24 +67,43 @@ except Exception as e:
 # Sidekonfigurasjon
 st.set_page_config(page_title="Reguleringsbot", layout="wide")
 
+# Dark/bright mode toggle
+if "dark_mode" not in st.session_state:
+    st.session_state.dark_mode = False
+
+toggle_label = "Bytt til mørk modus" if not st.session_state.dark_mode else "Bytt til lys modus"
+if st.sidebar.button(toggle_label):
+    st.session_state.dark_mode = not st.session_state.dark_mode
+    st.experimental_rerun()
+
+bg = "#000000" if st.session_state.dark_mode else "#FFFFFF"
+text = "#FFFFFF" if st.session_state.dark_mode else "#000000"
+scroll_bg = "#333333" if st.session_state.dark_mode else "#fdfdfd"
+border_color = "#555555" if st.session_state.dark_mode else "#ddd"
+
 # CSS for chat og kart
 st.markdown(
-    """
+    f"""
     <style>
-    .scrollbox {
+    .scrollbox {{
         max-height: 300px;
         overflow-y: auto;
         padding: 1rem;
-        background-color: #fdfdfd;
-        border: 1px solid #ddd;
+        background-color: {scroll_bg};
+        border: 1px solid {border_color};
         border-radius: 5px;
-    }
-    .leaflet-control-layers {
+        color: {text};
+    }}
+    .leaflet-control-layers {{
         z-index: 9999 !important;
         position: absolute !important;
         top: 10px !important;
         right: 10px !important;
-    }
+    }}
+    .stApp {{
+        background-color: {bg};
+        color: {text};
+    }}
     </style>
     """, unsafe_allow_html=True
 )
