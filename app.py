@@ -111,6 +111,17 @@ st.set_page_config(page_title="Reguleringsbot", layout="wide")
 st.markdown(
     """
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Playfair+Display:wght@400;700&display=swap');
+    :root {
+        --app-font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+        --front-font: 'Playfair Display', Georgia, 'Times New Roman', serif;
+    }
+    [data-testid=\"stAppViewContainer\"], [data-testid=\"stAppViewContainer\"] * {
+        font-family: var(--app-font) !important;
+    }
+    .front-font, .front-font * {
+        font-family: var(--front-font) !important;
+    }
     .scrollbox {
         max-height: 300px;
         overflow-y: auto;
@@ -134,21 +145,24 @@ if "show_welcome" not in st.session_state:
     st.session_state.show_welcome = True
 
 if st.session_state.show_welcome:
-    st.markdown(
-        """
-        ## 👋 Velkommen til Reguleringsbot!
-        
-        Her er hva du kan gjøre:
-        - **Chat med AI**: Still spørsmål om reguleringsplanen i tekstboksen til høyre.
-        - **Utforsk kartet**: Se reguleringsplaner, boligpriser og bedrifter i Tromsø på kartet.
-        - **Analyser planer**: Få AI-vurdering av om planen følger kommunens mål.
-        - **Foreslå analyser**: Send inn egne analyseforslag i sidepanelet.
-        
-        Trykk på "Lukk" når du er klar til å bruke appen.
-        """
-    )
-    if st.button("Lukk", key="close_welcome"):
-        st.session_state.show_welcome = False
+    with st.container():
+        st.markdown('<div class="front-font">', unsafe_allow_html=True)
+        st.markdown(
+            """
+            ## 👋 Velkommen til Reguleringsbot!
+            
+            Her er hva du kan gjøre:
+            - **Chat med AI**: Still spørsmål om reguleringsplanen i tekstboksen til høyre.
+            - **Utforsk kartet**: Se reguleringsplaner, boligpriser og bedrifter i Tromsø på kartet.
+            - **Analyser planer**: Få AI-vurdering av om planen følger kommunens mål.
+            - **Foreslå analyser**: Send inn egne analyseforslag i sidepanelet.
+            
+            Trykk på "Lukk" når du er klar til å bruke appen.
+            """
+        )
+        if st.button("Lukk", key="close_welcome"):
+            st.session_state.show_welcome = False
+        st.markdown('</div>', unsafe_allow_html=True)
 
 st.title("🏗️ Reguleringsbot – Chat og kart over Tromsø")
 
