@@ -321,18 +321,24 @@ kartlagvalg = st.sidebar.selectbox(
     key="kartlagvalg"
 )
 
+"""Test harness mirrors the main app's map selection. Use a dropdown instead
+of tabs so both entry points share the same interface."""
+
 # Kart-faner
 with col1:
-    tabs = st.tabs([
-        "📍 Reguleringsplan",
-        "💰 Boligpriser",
-        "🏢 Bedrifter i Tromsø",
-        "🏡 Fremtidig boligbygging",
-        "🔄 Boligområder med størst turnover",
-    ])
+    fanevalg = st.selectbox(
+        "Velg kart:",
+        [
+            "📍 Reguleringsplan",
+            "💰 Boligpriser",
+            "🏢 Bedrifter i Tromsø",
+            "🏡 Fremtidig boligbygging",
+            "🔄 Boligområder med størst turnover",
+        ],
+    )
 
     # --- Reguleringsplan ---
-    with tabs[0]:
+    if fanevalg == "📍 Reguleringsplan":
         default_coords = [69.6496, 18.9560]
         kart_coords = st.session_state.get("kart_koordinater", default_coords)
         zoom = 17 if st.session_state.get("vis_kart") and kart_coords != default_coords else 13
@@ -383,7 +389,7 @@ with col1:
         st_folium(m, width=900, height=600, key=f"kart_{kartlagvalg}")
 
     # --- Boligpriser ---
-    with tabs[1]:
+    elif fanevalg == "💰 Boligpriser":
         st.subheader("🏘️ Boliger etter prisklasse (demo)")
         boliger = [
             {"adresse": "Storgata 1", "pris": 1900000, "koordinater": [69.6501, 18.9550]},
@@ -431,7 +437,7 @@ with col1:
             st.info("Kartet vises først når du trykker på 'Vis kart for valgt plan/område' i sidepanelet.")
 
     # --- Bedrifter i Tromsø ---
-    with tabs[2]:
+    elif fanevalg == "🏢 Bedrifter i Tromsø":
         st.subheader("🏢 Bedrifter i Tromsø")
         søk = st.text_input("🔎 Søk etter bedrift (skriv hele eller deler av navnet):")
 
@@ -462,15 +468,16 @@ with col1:
                 st.info("Kartet vises først når du trykker på 'Vis kart for valgt plan/område' i sidepanelet.")
         else:
             st.info("Skriv inn et søkeord for å vise bedrifter på kartet.")
+
     # --- Fremtidig boligbygging ---
-    with tabs[3]:
+    elif fanevalg == "🏡 Fremtidig boligbygging":
         st.subheader("🏡 Fremtidig boligbygging")
         st.info(
             "Her kan du vise eller analysere fremtidige boligprosjekter i Tromsø. (Innhold kan tilpasses)"
         )
 
     # --- Boligområder med størst turnover ---
-    with tabs[4]:
+    elif fanevalg == "🔄 Boligområder med størst turnover":
         st.subheader("🔄 Boligområder med størst turnover")
         st.info(
             "Her kan du se hvilke områder som har høyest omsetning av boliger. (Innhold kan tilpasses)"
